@@ -52,17 +52,10 @@
       const day = date.getDay();
       const str = date.toISOString().split("T")[0];
 
-      // Helger
-      if (day === 0 || day === 6) return false;
-
-      // Helgdagar via API
-      if (holidays.includes(str)) return false;
-
-      // Julafton
-      if (date.getMonth() === 11 && date.getDate() === 24) return false;
-
-      // Midsommarafton (fredag mellan 19–25 juni)
-      if (date.getMonth() === 5 && day === 5 && date.getDate() >= 19 && date.getDate() <= 25) return false;
+      if (day === 0 || day === 6) return false; // Helger
+      if (holidays.includes(str)) return false;  // Helgdagar via API
+      if (date.getMonth() === 11 && date.getDate() === 24) return false; // Julafton
+      if (date.getMonth() === 5 && day === 5 && date.getDate() >= 19 && date.getDate() <= 25) return false; // Midsommarafton
 
       return true;
     }
@@ -77,13 +70,26 @@
       return count;
     }
 
+    function getSwedishTime(now = new Date()) {
+      // Skapa datum i svensk tid (CET/CEST)
+      const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+      // CET = UTC+1, CEST = UTC+2 (sommartid)
+      const year = now.getFullYear();
+      const startSummer = new Date(year, 2, 31); // mars
+      const endSummer = new Date(year, 9, 31);   // oktober
+      let offset = 1; // CET standard
+      const month = now.getMonth();
+      if (month > 2 && month < 9) offset = 2; // sommartid approx
+      return new Date(utc + (3600000 * offset));
+    }
+
     async function displayLetter() {
-      let today = new Date();
+      let today = getSwedishTime();
       const switchHour = 5;
       const switchMinute = 25;
 
-      // Byt dag först efter 05:25
-      if (today.getHours() < switchHour || (today.getHours() === switchHour && today.getMinutes() < switchMinute)) {
+      if (today.getHours() < switchHour || 
+          (today.getHours() === switchHour && today.getMinutes() < switchMinute)) {
         today.setDate(today.getDate() - 1);
       }
 
@@ -120,11 +126,9 @@
       document.body.style.backgroundColor = (letter === "X") ? "#0BA2F4" : "#27F584";
     }
 
-    displayLetter();
-
     function scheduleNextUpdate() {
-      const now = new Date();
-      const next = new Date();
+      const now = getSwedishTime();
+      const next = new Date(now);
       next.setHours(5, 25, 0, 0);
       if (now >= next) next.setDate(next.getDate() + 1);
 
@@ -135,6 +139,7 @@
       }, msUntilNext);
     }
 
+    displayLetter();
     scheduleNextUpdate();
   </script>
 </body>
