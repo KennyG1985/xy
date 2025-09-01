@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <title>X eller Y – med datum och veckodag</title>
+  <style>
+    body { 
+      display: flex; 
+      flex-direction: column;
+      justify-content: center; 
+      align-items: center; 
+      height: 100vh; 
+      font-family: Arial, sans-serif; 
+      transition: background-color 0.5s ease;
+    }
+    .letter { 
+      font-size: 15rem; /* stor bokstav */
+      font-weight: bold; 
+      color: #fff; /* alltid vit */
+    }
+    .date, .weekday {
+      font-size: 4rem; /* mindre än bokstaven */
+      font-weight: bold;
+      margin-top: 0.5rem;
+      color: #fff; /* alltid vit */
+    }
+  </style>
+</head>
+<body>
+  <div class="letter" id="letter">...</div>
+  <div class="date" id="date">...</div>
+  <div class="weekday" id="weekday">...</div>
+
+  <script>
+    const startDate = new Date("2025-01-02"); // Startpunkt för växlingen
+    let today = new Date();
+    let holidays = [];
+
+    // Byt bokstav först kl 05:25
+    const switchHour = 5;
+    const switchMinute = 25;
+    if (today.getHours() < switchHour || (today.getHours() === switchHour && today.getMinutes() < switchMinute)) {
+      today.setDate(today.getDate() - 1);
+    }
+
+    // Hämta helgdagar via API
+    async function fetchHolidays(year) {
+      const url = `https://api.dagsmart.se/holidays?year=${year}&weekends=false`;
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error("Fel vid hämtning av helgdagar");
+        const data = await res.json();
+        return data.map(h => h.date);
+      } catch (err) {
+        console.error(err);
+        return [];
+      }
+    }
+
+    function isValidWorkday(date) {
+      const day = date.getDay();
+      const str = date.toISOString().split("T")[0];
+      return (day !== 0 && day !== 6 && !holidays.includes(str));
+    }
+
+    function countWorkdays(from, to) {
+      let count = 0;
+      const cur = new Date(from);
+      while (cur <= to) {
+        if (isValidWorkday(cur)) count++;
+        cur.setDate(cur.getDate() + 1);
+      }
+      return count;
+    }
+
+    async function displayLetter() {
+      const thisYear = today.getFullYear();
+      const nextYear = thisYear + 1;
+
+      // Hämta helgdagar för aktuellt och nästa år
+      const [h1, h2] = await Promise.all([fetchHolidays(thisYear), fetchHolidays(nextYear)]);
+      holidays = [...h1, ...h2];
+
+      let refDate = today;
+      if (!isValidWorkday(today)) {
+        refDate = new Date(today);
+        while (!isValidWorkday(refDate) && refDate >= startDate) {
+          refDate.setDate(refDate.getDate() - 1);
+        }
+      }
+
+      const count = countWorkdays(startDate, refDate);
+      // Vänd ordningen på X och Y
+      const letter = (count % 2 === 0) ? "Y" : "X";
+
+      const letterDiv = document.getElementById("letter");
+      const dateDiv = document.getElementById("date");
+      const weekdayDiv = document.getElementById("weekday");
+
+      letterDiv.textContent = letter;
+
+      // Datum ÅÅÅÅ-MM-DD
+      const yyyy = refDate.getFullYear();
+      const mm = String(refDate.getMonth() + 1).padStart(2, "0");
+      const dd = String(refDate.getDate()).padStart(2, "0");
+      dateDiv.textContent = `${yyyy}-${mm}-${dd}`;
+
+      // Veckodag på svenska med stor första bokstav
+      const options = { weekday: 'long' };
+      let dayName = refDate.toLocaleDateString('sv-SE', options);
+      dayName = dayName.charAt(0).toUpperCase() + dayName.slice(1); // första bokstaven stor
+      weekdayDiv.textContent = dayName;
+
+      // Bakgrund
+      if (letter === "X") {
+        document.body.style.backgroundColor = "#0BA2F4"; // blå bakgrund
+      } else {
+        document.body.style.backgroundColor = "#27F584"; // grön bakgrund
+      }
+    }
+
+    displayLetter();
+  </script>
+</body>
+</html>
