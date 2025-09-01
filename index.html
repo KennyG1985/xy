@@ -51,7 +51,20 @@
     function isValidWorkday(date) {
       const day = date.getDay();
       const str = date.toISOString().split("T")[0];
-      return (day !== 0 && day !== 6 && !holidays.includes(str));
+
+      // Helger
+      if (day === 0 || day === 6) return false;
+
+      // Helgdagar via API
+      if (holidays.includes(str)) return false;
+
+      // Julafton
+      if (date.getMonth() === 11 && date.getDate() === 24) return false;
+
+      // Midsommarafton (fredag mellan 19–25 juni)
+      if (date.getMonth() === 5 && day === 5 && date.getDate() >= 19 && date.getDate() <= 25) return false;
+
+      return true;
     }
 
     function countWorkdays(from, to) {
@@ -69,6 +82,7 @@
       const switchHour = 5;
       const switchMinute = 25;
 
+      // Byt dag först efter 05:25
       if (today.getHours() < switchHour || (today.getHours() === switchHour && today.getMinutes() < switchMinute)) {
         today.setDate(today.getDate() - 1);
       }
