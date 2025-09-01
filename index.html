@@ -14,15 +14,15 @@
       transition: background-color 0.5s ease;
     }
     .letter { 
-      font-size: 15rem; /* stor bokstav */
+      font-size: 15rem;
       font-weight: bold; 
-      color: #fff; /* alltid vit */
+      color: #fff;
     }
     .date, .weekday {
-      font-size: 4rem; /* mindre än bokstaven */
+      font-size: 4rem;
       font-weight: bold;
       margin-top: 0.5rem;
-      color: #fff; /* alltid vit */
+      color: #fff;
     }
   </style>
 </head>
@@ -32,18 +32,9 @@
   <div class="weekday" id="weekday">...</div>
 
   <script>
-    const startDate = new Date("2025-01-02"); // Startpunkt för växlingen
-    let today = new Date();
+    const startDate = new Date("2025-01-02");
     let holidays = [];
 
-    // Byt bokstav först kl 05:25
-    const switchHour = 5;
-    const switchMinute = 25;
-    if (today.getHours() < switchHour || (today.getHours() === switchHour && today.getMinutes() < switchMinute)) {
-      today.setDate(today.getDate() - 1);
-    }
-
-    // Hämta helgdagar via API
     async function fetchHolidays(year) {
       const url = `https://api.dagsmart.se/holidays?year=${year}&weekends=false`;
       try {
@@ -74,12 +65,21 @@
     }
 
     async function displayLetter() {
+      let today = new Date();
+      const switchHour = 5;
+      const switchMinute = 25;
+
+      if (today.getHours() < switchHour || (today.getHours() === switchHour && today.getMinutes() < switchMinute)) {
+        today.setDate(today.getDate() - 1);
+      }
+
       const thisYear = today.getFullYear();
       const nextYear = thisYear + 1;
 
-      // Hämta helgdagar för aktuellt och nästa år
-      const [h1, h2] = await Promise.all([fetchHolidays(thisYear), fetchHolidays(nextYear)]);
-      holidays = [...h1, ...h2];
+      if (holidays.length === 0) {
+        const [h1, h2] = await Promise.all([fetchHolidays(thisYear), fetchHolidays(nextYear)]);
+        holidays = [...h1, ...h2];
+      }
 
       let refDate = today;
       if (!isValidWorkday(today)) {
@@ -90,36 +90,38 @@
       }
 
       const count = countWorkdays(startDate, refDate);
-      // Vänd ordningen på X och Y
       const letter = (count % 2 === 0) ? "Y" : "X";
 
-      const letterDiv = document.getElementById("letter");
-      const dateDiv = document.getElementById("date");
-      const weekdayDiv = document.getElementById("weekday");
+      document.getElementById("letter").textContent = letter;
 
-      letterDiv.textContent = letter;
-
-      // Datum ÅÅÅÅ-MM-DD
       const yyyy = refDate.getFullYear();
       const mm = String(refDate.getMonth() + 1).padStart(2, "0");
       const dd = String(refDate.getDate()).padStart(2, "0");
-      dateDiv.textContent = `${yyyy}-${mm}-${dd}`;
+      document.getElementById("date").textContent = `${yyyy}-${mm}-${dd}`;
 
-      // Veckodag på svenska med stor första bokstav
-      const options = { weekday: 'long' };
-      let dayName = refDate.toLocaleDateString('sv-SE', options);
-      dayName = dayName.charAt(0).toUpperCase() + dayName.slice(1); // första bokstaven stor
-      weekdayDiv.textContent = dayName;
+      let dayName = refDate.toLocaleDateString('sv-SE', { weekday: 'long' });
+      dayName = dayName.charAt(0).toUpperCase() + dayName.slice(1);
+      document.getElementById("weekday").textContent = dayName;
 
-      // Bakgrund
-      if (letter === "X") {
-        document.body.style.backgroundColor = "#0BA2F4"; // blå bakgrund
-      } else {
-        document.body.style.backgroundColor = "#27F584"; // grön bakgrund
-      }
+      document.body.style.backgroundColor = (letter === "X") ? "#0BA2F4" : "#27F584";
     }
 
     displayLetter();
+
+    function scheduleNextUpdate() {
+      const now = new Date();
+      const next = new Date();
+      next.setHours(5, 25, 0, 0);
+      if (now >= next) next.setDate(next.getDate() + 1);
+
+      const msUntilNext = next - now;
+      setTimeout(() => {
+        displayLetter();
+        scheduleNextUpdate();
+      }, msUntilNext);
+    }
+
+    scheduleNextUpdate();
   </script>
 </body>
 </html>
