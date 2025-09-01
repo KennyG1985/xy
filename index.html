@@ -71,16 +71,22 @@
     }
 
     function getSwedishTime(now = new Date()) {
-      // Skapa datum i svensk tid (CET/CEST)
       const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
-      // CET = UTC+1, CEST = UTC+2 (sommartid)
-      const year = now.getFullYear();
-      const startSummer = new Date(year, 2, 31); // mars
-      const endSummer = new Date(year, 9, 31);   // oktober
+      const swedenTime = new Date(utc);
+
+      const year = swedenTime.getFullYear();
+      const lastSundayMarch = new Date(year, 2, 31);
+      lastSundayMarch.setDate(31 - lastSundayMarch.getDay());
+      const lastSundayOctober = new Date(year, 9, 31);
+      lastSundayOctober.setDate(31 - lastSundayOctober.getDay());
+
       let offset = 1; // CET standard
-      const month = now.getMonth();
-      if (month > 2 && month < 9) offset = 2; // sommartid approx
-      return new Date(utc + (3600000 * offset));
+      if (swedenTime >= lastSundayMarch && swedenTime < lastSundayOctober) {
+        offset = 2; // CEST sommartid
+      }
+
+      swedenTime.setHours(swedenTime.getHours() + offset);
+      return swedenTime;
     }
 
     async function displayLetter() {
@@ -88,7 +94,7 @@
       const switchHour = 5;
       const switchMinute = 25;
 
-      if (today.getHours() < switchHour || 
+      if (today.getHours() < switchHour ||
           (today.getHours() === switchHour && today.getMinutes() < switchMinute)) {
         today.setDate(today.getDate() - 1);
       }
