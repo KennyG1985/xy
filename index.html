@@ -34,6 +34,7 @@
   <script>
     const startDate = new Date("2025-01-02");
     let holidays = [];
+    let currentDay = null;
 
     async function fetchHolidays(year) {
       const url = `https://api.dagsmart.se/holidays?year=${year}&weekends=false`;
@@ -80,24 +81,22 @@
       const lastSundayOctober = new Date(year, 9, 31);
       lastSundayOctober.setDate(31 - lastSundayOctober.getDay());
 
-      let offset = 1; // CET standard
+      let offset = 1; // CET
       if (swedenTime >= lastSundayMarch && swedenTime < lastSundayOctober) {
-        offset = 2; // CEST sommartid
+        offset = 2; // CEST
       }
-
       swedenTime.setHours(swedenTime.getHours() + offset);
       return swedenTime;
     }
 
     async function displayLetter() {
       let today = getSwedishTime();
-      const switchHour = 5;
-      const switchMinute = 25;
+      today.setHours(0,0,0,0); // vi tar bara datum, ignorerar tid
 
-      if (today.getHours() < switchHour ||
-          (today.getHours() === switchHour && today.getMinutes() < switchMinute)) {
-        today.setDate(today.getDate() - 1);
-      }
+      // Om dagens datum redan är beräknad, gör inget
+      if (currentDay && currentDay.getTime() === today.getTime()) return;
+
+      currentDay = today;
 
       const thisYear = today.getFullYear();
       const nextYear = thisYear + 1;
@@ -107,9 +106,8 @@
         holidays = [...h1, ...h2];
       }
 
-      let refDate = today;
-      if (!isValidWorkday(today)) {
-        refDate = new Date(today);
+      let refDate = new Date(today);
+      if (!isValidWorkday(refDate)) {
         while (!isValidWorkday(refDate) && refDate >= startDate) {
           refDate.setDate(refDate.getDate() - 1);
         }
