@@ -71,31 +71,42 @@
       return count;
     }
 
-    function getSwedishTime(now = new Date()) {
-      const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
-      const swedenTime = new Date(utc);
+    // --- Hämta tid från världsklocka ---
+    let cachedTime = null;
+    let lastFetch = 0;
 
-      const year = swedenTime.getFullYear();
-      const lastSundayMarch = new Date(year, 2, 31);
-      lastSundayMarch.setDate(31 - lastSundayMarch.getDay());
-      const lastSundayOctober = new Date(year, 9, 31);
-      lastSundayOctober.setDate(31 - lastSundayOctober.getDay());
-
-      let offset = 1; // CET
-      if (swedenTime >= lastSundayMarch && swedenTime < lastSundayOctober) {
-        offset = 2; // CEST
+    async function fetchSwedishTime() {
+      try {
+        const res = await fetch("https://worldtimeapi.org/api/timezone/Europe/Stockholm");
+        if (!res.ok) throw new Error("Kunde inte hämta tid från API");
+        const data = await res.json();
+        return new Date(data.datetime);
+      } catch (err) {
+        console.error("Fel vid hämtning av världsklocka, fallback till lokal tid", err);
+        return new Date(new Date().toLocaleString("sv-SE", { timeZone: "Europe/Stockholm" }));
       }
-      swedenTime.setHours(swedenTime.getHours() + offset);
-      return swedenTime;
+    }
+
+    async function getSwedishTime() {
+      const now = Date.now();
+      if (!cachedTime || now - lastFetch > 5 * 60 * 1000) { // uppdatera var 5:e minut
+        cachedTime = await fetchSwedishTime();
+        lastFetch = now;
+      }
+      return new Date(cachedTime);
     }
 
     async function displayLetter() {
-      let today = getSwedishTime();
-      today.setHours(0,0,0,0); // vi tar bara datum, ignorerar tid
+      let swedishNow = await getSwedishTime();
+      let today = new Date(swedishNow);
 
-      // Om dagens datum redan är beräknad, gör inget
+      // Om klockan är före 05:25 → använd gårdagens datum
+      if (swedishNow.getHours() < 5 || (swedishNow.getHours() === 5 && swedishNow.getMinutes() < 25)) {
+        today.setDate(today.getDate() - 1);
+      }
+      today.setHours(0,0,0,0);
+
       if (currentDay && currentDay.getTime() === today.getTime()) return;
-
       currentDay = today;
 
       const thisYear = today.getFullYear();
@@ -130,21 +141,23 @@
       document.body.style.backgroundColor = (letter === "X") ? "#0BA2F4" : "#27F584";
     }
 
-    function scheduleNextUpdate() {
-      const now = getSwedishTime();
+    async function scheduleNextUpdate() {
+      const now = await getSwedishTime();
       const next = new Date(now);
       next.setHours(5, 25, 0, 0);
       if (now >= next) next.setDate(next.getDate() + 1);
 
       const msUntilNext = next - now;
-      setTimeout(() => {
-        displayLetter();
+      setTimeout(async () => {
+        await displayLetter();
         scheduleNextUpdate();
       }, msUntilNext);
     }
 
-    displayLetter();
-    scheduleNextUpdate();
+    (async () => {
+      await displayLetter();
+      scheduleNextUpdate();
+    })();
   </script>
 </body>
 </html>
