@@ -1,178 +1,241 @@
 <!DOCTYPE html>
 <html lang="sv">
 <head>
-  <meta charset="UTF-8">
-  <title>X eller Y – med datum och veckodag</title>
-  <style>
-    body { 
-      display: flex; 
-      flex-direction: column;
-      justify-content: center; 
-      align-items: center; 
-      height: 100vh; 
-      font-family: Arial, sans-serif; 
-      transition: background 1.5s ease;
-    }
-    .letter { 
-      font-size: 15rem;
-      font-weight: bold; 
-      display: inline-block;
-      transition: transform 0.6s ease, opacity 0.6s ease;
-      transform-origin: center;
-    }
-    .date, .weekday {
-      font-size: 4rem;
-      font-weight: bold;
-      margin-top: 0.5rem;
-    }
-    .letter, .date, .weekday {
-      color: #fff;
-      text-shadow: 2px 2px 6px rgba(0,0,0,0.5);
-    }
-  </style>
+<meta charset="UTF-8">
+<title>X eller Y – med datum och veckodag</title>
+<style>
+body { 
+  display: flex; 
+  flex-direction: column;
+  justify-content: center; 
+  align-items: center; 
+  height: 100vh; 
+  font-family: Arial, sans-serif; 
+  transition: background 1.5s ease;
+  /* ingen default-bakgrund här */
+}
+.letter { 
+  font-size: 15rem;
+  font-weight: bold; 
+  display: inline-block;
+  transition: transform 0.6s ease, opacity 0.6s ease;
+  transform-origin: center;
+  opacity: 1;
+  visibility: hidden;
+}
+.date, .weekday {
+  font-size: 4rem;
+  font-weight: bold;
+  margin-top: 0.5rem;
+  opacity: 1;
+  visibility: hidden;
+  transition: transform 0.6s ease, opacity 0.6s ease;
+}
+.next-workday-text,
+.clock-text,
+.countdown-text {
+  font-size: 2rem;
+  font-weight: bold;
+  text-align: center;
+  margin-top: 0.5rem;
+  max-width: 90vw;
+  opacity: 1;
+  visibility: hidden;
+  transition: transform 0.6s ease, opacity 0.6s ease;
+}
+.letter, .date, .weekday, .next-workday-text, .clock-text, .countdown-text {
+  color: #fff;
+  text-shadow: 2px 2px 6px rgba(0,0,0,0.5);
+}
+</style>
 </head>
 <body>
-  <div class="letter" id="letter">...</div>
-  <div class="date" id="date">...</div>
-  <div class="weekday" id="weekday">...</div>
+<div class="letter" id="letter">X</div>
+<div class="date" id="date">0000-00-00</div>
+<div class="weekday" id="weekday">Veckodag</div>
+<div class="clock-text" id="clock-text">Klockan är 00:00:00</div>
+<div class="next-workday-text" id="next-workday-text">Nästa arbetsdygn...</div>
+<div class="countdown-text" id="countdown-text">Tid kvar...</div>
 
-  <script>
-    const startDate = new Date("2025-01-02");
-    let holidays = [];
-    let currentDay = null;
+<script>
+// START & GLOBALA VARIABLER
+const startDate = new Date("2025-01-02"); // Första X-dagen
+let currentLetter = null;
+let currentTime = null;
+let lastSync = 0;
 
-    async function fetchHolidays(year) {
-      try {
-        const res = await fetch(`https://api.dagsmart.se/holidays?year=${year}&weekends=false`);
-        if (!res.ok) throw new Error("Fel vid hämtning av helgdagar");
-        const data = await res.json();
-        return data.map(h => h.date);
-      } catch (err) {
-        console.error(err);
-        return [];
-      }
+// Svenska helgdagar 2025–2026 inkl julafton, midsommar, nyårsafton
+    const localHolidays = [
+  // 2025
+  "2025-01-01","2025-01-06","2025-04-18","2025-04-20","2025-04-21","2025-05-01","2025-05-29","2025-06-06",
+  "2025-06-20","2025-06-21","2025-11-01","2025-12-24","2025-12-25","2025-12-26","2025-12-31",
+
+  // 2026
+  "2026-01-01","2026-01-06","2026-04-03","2026-04-05","2026-04-06","2026-05-01","2026-05-14","2026-05-24","2026-06-06",
+  "2026-06-19","2026-06-20","2026-10-31","2026-11-01","2026-12-24","2026-12-25","2026-12-26","2026-12-31",
+
+  // 2027
+  "2027-01-01","2027-01-06","2027-04-02","2027-04-04","2027-04-05","2027-05-01","2027-05-13","2027-05-23","2027-06-06",
+  "2027-06-25","2027-06-26","2027-10-30","2027-11-01","2027-12-24","2027-12-25","2027-12-26","2027-12-31",
+
+  // 2028
+  "2028-01-01","2028-01-06","2028-04-14","2028-04-16","2028-04-17","2028-05-01","2028-05-25","2028-06-04","2028-06-06",
+  "2028-06-23","2028-06-24","2028-10-28","2028-12-24","2028-12-25","2028-12-26","2028-12-31",
+
+  // 2029
+  "2029-01-01","2029-01-06","2029-03-30","2029-04-01","2029-04-02","2029-05-01","2029-05-10","2029-05-20","2029-06-06",
+  "2029-06-22","2029-06-23","2029-11-03","2029-12-24","2029-12-25","2029-12-26","2029-12-31"
+    ];
+
+function capitalize(str) { return str.charAt(0).toUpperCase() + str.slice(1); }
+
+// Kontrollera arbetsdag
+function isValidWorkday(date) {
+    const day = date.getDay();
+    if (day === 0 || day === 6) return false;
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth()+1).padStart(2,'0');
+    const dd = String(date.getDate()).padStart(2,'0');
+    const str = `${yyyy}-${mm}-${dd}`;
+    if (localHolidays.includes(str)) return false;
+    return true;
+}
+
+// Referensdatum för X/Y (föregående arbetsdag fram till 05:30)
+function getXYReferenceDate() {
+    const now = new Date(new Date().toLocaleString("sv-SE", { timeZone: "Europe/Stockholm" }));
+    let xyDate = new Date(now);
+    xyDate.setHours(0,0,0,0);
+    if (now.getHours() < 5 || (now.getHours() === 5 && now.getMinutes() < 30)) {
+        xyDate.setDate(xyDate.getDate() - 1);
     }
-
-    function isValidWorkday(date) {
-      const day = date.getDay();
-      const str = date.toISOString().split("T")[0];
-      if (day === 0 || day === 6) return false;
-      if (holidays.includes(str)) return false;
-      if (date.getMonth() === 11 && date.getDate() === 24) return false;
-      if (date.getMonth() === 11 && date.getDate() === 31) return false;
-      if (date.getMonth() === 5 && day === 5 && date.getDate() >= 19 && date.getDate() <= 25) return false;
-      return true;
+    while (!isValidWorkday(xyDate)) {
+        xyDate.setDate(xyDate.getDate() - 1);
     }
+    return xyDate;
+}
 
-    function countWorkdays(from, to) {
-      let count = 0;
-      const cur = new Date(from);
-      while (cur <= to) {
-        if (isValidWorkday(cur)) count++;
+// Beräkna X/Y med korrekt start = X
+function computeLetter() {
+    const xyDate = getXYReferenceDate();
+    let count = 0;
+    const cur = new Date(startDate);
+    cur.setHours(0,0,0,0);
+    while (cur < xyDate) {
         cur.setDate(cur.getDate() + 1);
-      }
-      return count;
+        if (isValidWorkday(cur)) count++;
     }
+    return ((count % 2) === 1) ? "X" : "Y";
+}
 
-    async function getSwedishTime() {
-      try {
-        const res = await fetch("https://worldtimeapi.org/api/timezone/Europe/Stockholm");
-        if (!res.ok) throw new Error("Fel vid hämtning av tid");
-        const data = await res.json();
-        return new Date(data.datetime);
-      } catch (err) {
-        console.error("Kunde inte hämta svensk tid, fallback till lokal tid:", err);
-        return new Date();
-      }
-    }
+// Visa bokstav, datum och veckodag
+function displayLetter(doFlip = true) {
+    const refDate = getXYReferenceDate(); // <-- Korrekt datum för veckodag
+    const letter = computeLetter();
+    const letterEl = document.getElementById("letter");
 
-    function capitalize(str) {
-      return str.charAt(0).toUpperCase() + str.slice(1);
-    }
+    document.body.style.background = (letter === "X")
+        ? "linear-gradient(135deg, #0BA2F4, #004080)"
+        : "linear-gradient(135deg, #27F584, #008040)";
 
-    async function displayLetter(doFlip = false) {
-      let now = await getSwedishTime();
-
-      // <–– fix här: om klockan är före 05:30, räkna gårdagens arbetsdag
-      if (now.getHours() < 5 || (now.getHours() === 5 && now.getMinutes() < 30)) {
-        now.setDate(now.getDate() - 1);
-      }
-
-      let today = new Date(now);
-      today.setHours(0,0,0,0);
-
-      if (currentDay && currentDay.getTime() === today.getTime() && !doFlip) return;
-      currentDay = today;
-
-      const thisYear = today.getFullYear();
-      const nextYear = thisYear + 1;
-
-      if (holidays.length === 0) {
-        const [h1, h2] = await Promise.all([fetchHolidays(thisYear), fetchHolidays(nextYear)]);
-        holidays = [...h1, ...h2];
-      }
-
-      let refDate = new Date(today);
-      if (!isValidWorkday(refDate)) {
-        while (!isValidWorkday(refDate) && refDate >= startDate) {
-          refDate.setDate(refDate.getDate() - 1);
-        }
-      }
-
-      const count = countWorkdays(startDate, refDate);
-      const letter = (count % 2 === 0) ? "Y" : "X";
-
-      const letterEl = document.getElementById("letter");
-      if (doFlip) {
+    if (doFlip || letter !== currentLetter) {
         letterEl.style.transform = "rotateY(90deg)";
         letterEl.style.opacity = 0;
         setTimeout(() => {
-          letterEl.textContent = letter;
-          letterEl.style.transform = "rotateY(0deg)";
-          letterEl.style.opacity = 1;
+            letterEl.textContent = letter;
+            letterEl.style.transform = "rotateY(0deg)";
+            letterEl.style.opacity = 1;
+            letterEl.style.visibility = "visible";
+            document.querySelectorAll(".date, .weekday, .next-workday-text, .clock-text, .countdown-text")
+                .forEach(el => el.style.visibility = "visible");
         }, 600);
-      } else {
+    } else {
         letterEl.textContent = letter;
-      }
-
-      const yyyy = refDate.getFullYear();
-      const mm = String(refDate.getMonth() + 1).padStart(2, "0");
-      const dd = String(refDate.getDate()).padStart(2, "0");
-      document.getElementById("date").textContent = `${yyyy}-${mm}-${dd}`;
-      document.getElementById("weekday").textContent = capitalize(refDate.toLocaleDateString('sv-SE', { weekday: 'long' }));
-
-      document.body.style.background = (letter === "X") 
-        ? "linear-gradient(135deg, #0BA2F4, #004080)"
-        : "linear-gradient(135deg, #27F584, #008040)";
     }
 
-    function getNextWorkdayStart(now) {
-      let next = new Date(now);
-      next.setHours(5,30,0,0);
-      if (now >= next) next.setDate(next.getDate() + 1);
-      while (!isValidWorkday(next)) next.setDate(next.getDate() + 1);
-      return next;
+    currentLetter = letter;
+    document.getElementById("date").textContent =
+        refDate.toLocaleDateString('sv-SE', {year:'numeric', month:'2-digit', day:'2-digit'}).replace(/\./g,'-');
+    document.getElementById("weekday").textContent =
+        capitalize(refDate.toLocaleDateString('sv-SE', { weekday: 'long' }));
+}
+
+// Nästa arbetsdag start 05:30
+function getNextWorkdayStart(now) {
+    let next = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 5, 30, 0, 0);
+    if (now >= next) next.setDate(next.getDate() + 1);
+    while (!isValidWorkday(next)) {
+        next.setDate(next.getDate() + 1);
+        next.setHours(5,30,0,0);
     }
+    return next;
+}
 
-    function scheduleLetterUpdate() {
-      getSwedishTime().then(now => {
-        const next = getNextWorkdayStart(now);
-        const msUntilNext = next - now;
-        setTimeout(() => {
-          displayLetter(true); // flip exakt vid 05:30
-          scheduleLetterUpdate();
-        }, msUntilNext);
-      });
+// Hämta svensk tid
+async function getSwedishTime() {
+    try {
+        const API_KEY = "40O5JW280XZE";
+        const url = `https://api.timezonedb.com/v2.1/get-time-zone?key=${API_KEY}&format=json&by=zone&zone=Europe/Stockholm`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        return new Date(data.formatted);
+    } catch (err) {
+        return new Date();
     }
+}
 
-    // Säkerhetskontroll varje minut (utan flip)
-    setInterval(() => {
-      displayLetter(false);
-    }, 60000);
+// Klocka och nedräkning
+async function updateClockAndCountdown() {
+    const nowMs = Date.now();
+    if (!currentTime || nowMs - lastSync > 5*60*1000) {
+        currentTime = await getSwedishTime();
+        lastSync = nowMs;
+    } else {
+        currentTime = new Date(currentTime.getTime() + 1000);
+    }
+    const now = currentTime;
+    const nextWorkday = getNextWorkdayStart(now);
 
-    // Init
-    displayLetter();               // direkt på laddning
-    scheduleLetterUpdate();        // flip exakt vid 05:30
-  </script>
+    const yyyy = nextWorkday.getFullYear();
+    const mm = String(nextWorkday.getMonth()+1).padStart(2,'0');
+    const dd = String(nextWorkday.getDate()).padStart(2,'0');
+    const weekday = nextWorkday.toLocaleDateString("sv-SE", { weekday: "long" });
+
+    document.getElementById("next-workday-text").textContent =
+      `Nästa arbetsdygn börjar ${weekday} ${yyyy}-${mm}-${dd} 05:30`;
+    document.getElementById("clock-text").textContent =
+      `Klockan är nu ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+
+    const diff = nextWorkday - now;
+    document.getElementById("countdown-text").textContent =
+      `Tid kvar till nästa arbetsdygn ${String(Math.floor(diff / (1000*60*60)).toString().padStart(2,'0'))}:${String(Math.floor((diff/1000/60)%60).toString().padStart(2,'0'))}:${String(Math.floor((diff/1000)%60).toString().padStart(2,'0'))}`;
+}
+
+// Sätt bakgrund direkt vid laddning, innan bokstaven animeras
+(function setInitialBackground() {
+    const letter = computeLetter();
+    document.body.style.background = (letter === "X")
+        ? "linear-gradient(135deg, #0BA2F4, #004080)"   // Blå för X
+        : "linear-gradient(135deg, #27F584, #008040)"; // Grön för Y
+})();
+
+// Schemalägg X/Y, datum och veckodag vid 05:30
+async function scheduleLetterUpdate() {
+    const now = new Date();
+    const next = getNextWorkdayStart(now);
+    const msUntilNext = next - now;
+    setTimeout(() => {
+        displayLetter(true);
+        updateClockAndCountdown();
+        scheduleLetterUpdate();
+    }, msUntilNext);
+}
+
+// START
+displayLetter(true);
+scheduleLetterUpdate();
+setInterval(updateClockAndCountdown, 1000);
+</script>
 </body>
 </html>
